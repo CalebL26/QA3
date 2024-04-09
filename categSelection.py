@@ -1,113 +1,104 @@
-import sqlite3
-import tkinter as tk
+import sqlite3 
+import tkinter as tk 
 from tkinter import ttk
 
 class Question:
-    def __init__(self, category, text, options, correct_answer):
-        self.category = category
-        self.text = text
-        self.options = options
-        self.correct_answer = correct_answer
+    @staticmethod
+    def on_option_selected(event): 
+        selected_option = dropdown.get() 
+        window.destroy()  # Close the first GUI window 
+        open_question_gui(selected_option) 
 
-    def display_question(self):
-        formatted_question = f"{self.text}\n"
-        for option in self.options:
-            formatted_question += f"- {option}\n"
-        return formatted_question
+def open_question_gui(selected_option): 
+    question_window = tk.Tk() 
+    question_window.title(selected_option + " Questions") 
 
+    conn = sqlite3.connect('business_questions.db') 
+    cursor = conn.cursor() 
 
-def on_option_selected(event):
-    selected_option = dropdown.get()
-    window.destroy()  # Close the first GUI window
-    open_question_gui(selected_option)
+    cursor.execute("SELECT * FROM questions") 
+    questions = cursor.fetchall() 
 
+    question_label = tk.Label(question_window, text="Answer the following questions:") 
+    question_label.pack() 
 
-def open_question_gui(selected_option):
-    question_window = tk.Tk()
-    question_window.title(selected_option + " Questions")
+    # Create a canvas to contain the questions and a scrollbar 
+    canvas = tk.Canvas(question_window) 
+    canvas.pack(side="left", fill="both", expand=True) 
 
-    conn = sqlite3.connect('business_questions.db')
-    cursor = conn.cursor()
+    scrollbar = tk.Scrollbar(question_window, orient="vertical", command=canvas.yview) 
+    scrollbar.pack(side="right", fill="y") 
 
-    cursor.execute("SELECT * FROM questions")
-    questions = cursor.fetchall()
+    canvas.configure(yscrollcommand=scrollbar.set) 
 
-    question_label = tk.Label(question_window, text="Answer the following questions:")
-    question_label.pack()
+    # Create a frame inside the canvas to hold the questions 
+    question_frame = ttk.Frame(canvas) 
+    canvas.create_window((0, 0), window=question_frame, anchor="nw") 
 
-    canvas = tk.Canvas(question_window)
-    canvas.pack(side="left", fill="both", expand=True)
+    # Function to resize the canvas scroll region 
+    def resize_scroll_region(event): 
+        canvas.configure(scrollregion=canvas.bbox("all")) 
 
-    scrollbar = tk.Scrollbar(question_window, orient="vertical", command=canvas.yview)
-    scrollbar.pack(side="right", fill="y")
+    question_frame.bind("<Configure>", resize_scroll_region) 
 
-    canvas.configure(yscrollcommand=scrollbar.set)
+    def submit(): 
+        user_answers = [option_vars[i].get() for i in range(len(option_vars))] 
+        correct_answers = [question[7] for question in questions if question[1] == selected_option] 
 
-    question_frame = ttk.Frame(canvas)
-    canvas.create_window((0, 0), window=question_frame, anchor="nw")
+        for i, (correct_answer) in enumerate(zip(correct_answers)): 
+            result_label = result_labels[i] 
+            result_label.config(text=f"Correct answer:{correct_answer}") 
 
-    def resize_scroll_region(event):
-        canvas.configure(scrollregion=canvas.bbox("all"))
+    option_vars = []  # Store option variables to access user selections later 
+    result_labels = []  # Store labels to display results after submission 
 
-    question_frame.bind("<Configure>", resize_scroll_region)
+    for question in questions: 
+        if question[1] == selected_option: 
+            question_text = question[2] 
+            options = [question[3], question[4], question[5], question[6]] 
+            answer = question[7] 
 
-    def submit():
-        user_answers = [option_vars[i].get() for i in range(len(option_vars))]
-        correct_answers = [question.correct_answer for question in questions if question.category == selected_option]
+            question_label = ttk.Label(question_frame, text=question_text) 
+            question_label.pack(padx=2, pady=2, anchor="w", fill="x") 
 
-        for i, (user_answer, correct_answer) in enumerate(zip(user_answers, correct_answers)):
-            result_label = result_labels[i]
-            if user_answer == correct_answer:
-                result_label.config(text="Correct answer!")
-            else:
-                result_label.config(text=f"Incorrect. Correct answer: {correct_answer}")
+            # Create option variables to store user selections 
+            option_var = tk.StringVar(value="") 
+            option_vars.append(option_var) 
 
-    option_vars = []
-    result_labels = []
+            for idx, option in enumerate(options): 
+                option_radio = ttk.Radiobutton(question_frame, text=option, value=option, variable=option_var) 
+                option_radio.pack(anchor="w") 
 
-    for question_data in questions:
-        if question_data[1] == selected_option:
-            category, text, options, correct_answer = question_data[1], question_data[2], question_data[3:7], question_data[7]
-            question = Question(category, text, options, correct_answer)
+            # Create label to display correct answer (initially hidden) 
+            correct_answer_label = ttk.Label(question_frame, text="Correct Answer: " + answer) 
+            result_label = ttk.Label(question_frame, text="") 
+            result_label.pack(anchor="w", pady=2) 
+            result_labels.append(result_label) 
 
-            question_label = ttk.Label(question_frame, text=question.display_question())
-            question_label.pack(padx=2, pady=2, anchor="w", fill="x")
+    submit_button = ttk.Button(question_window, text="Submit", command=submit) 
+    submit_button.pack(pady=5) 
 
-            option_var = tk.StringVar(value="")
-            option_vars.append(option_var)
+    score_label = tk.Label(question_window,text="") 
+    score_label.pack(pady=5) 
 
-            for idx, option in enumerate(question.options):
-                option_radio = ttk.Radiobutton(question_frame, text=option, value=option, variable=option_var)
-                option_radio.pack(anchor="w")
+    conn.close() 
 
-            result_label = ttk.Label(question_frame, text="")
-            result_label.pack(anchor="w", pady=2)
-            result_labels.append(result_label)
+    question_window.mainloop() 
 
-    submit_button = ttk.Button(question_window, text="Submit", command=submit)
-    submit_button.pack(pady=5)
+window = tk.Tk() 
+window.title("Category Selector") 
 
-    score_label = tk.Label(question_window,text="")
-    score_label.pack(pady=5)
+label = tk.Label(window, text="Welcome to the QuizBowl, please select a category you would like to be quizzed on...", 
+                 padx=100, pady=15, fg="white", bg="black", font=10) 
+label.pack() 
 
-    conn.close()
+options = ["Business Management", "Business Stats", "Database Management", "Marketing", "Business Application Development"] 
 
-    question_window.mainloop()
+dropdown = ttk.Combobox(window, values=options) 
+dropdown.pack() 
 
-window = tk.Tk()
-window.title("Category Selector")
+dropdown.current(0) 
 
-label = tk.Label(window, text="Welcome to the QuizBowl, please select a category you would like to be quizzed on...",
-                 padx=100, pady=15, fg="white", bg="black", font=10)
-label.pack()
-
-options = ["Business Management", "Business Stats", "Database Management", "Marketing", "Business Application Development"]
-
-dropdown = ttk.Combobox(window, values=options)
-dropdown.pack()
-
-dropdown.current(0)
-
-dropdown.bind("<<ComboboxSelected>>", on_option_selected)
+dropdown.bind("<<ComboboxSelected>>", Question.on_option_selected) 
 
 window.mainloop()
